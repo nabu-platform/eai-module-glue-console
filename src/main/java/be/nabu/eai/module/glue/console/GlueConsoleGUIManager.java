@@ -2,18 +2,14 @@ package be.nabu.eai.module.glue.console;
 
 import java.io.IOException;
 import java.text.ParseException;
-import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import javafx.beans.property.BooleanProperty;
-import javafx.beans.property.SimpleBooleanProperty;
 import javafx.event.ActionEvent;
 import javafx.event.Event;
 import javafx.event.EventHandler;
 import javafx.scene.control.Button;
-import javafx.scene.control.ScrollPane;
 import javafx.scene.control.Tab;
 import javafx.scene.layout.AnchorPane;
 import javafx.scene.layout.HBox;
@@ -26,7 +22,6 @@ import be.nabu.eai.module.glue.console.table.AceEditorWriter;
 import be.nabu.eai.repository.api.Entry;
 import be.nabu.eai.repository.api.ResourceEntry;
 import be.nabu.eai.repository.resources.RepositoryEntry;
-import be.nabu.glue.api.Script;
 import be.nabu.glue.core.impl.parsers.GlueParserProvider;
 import be.nabu.glue.core.impl.providers.StaticJavaMethodProvider;
 import be.nabu.glue.core.repositories.DynamicScriptRepository;
@@ -41,20 +36,22 @@ import be.nabu.libs.property.api.Value;
 
 public class GlueConsoleGUIManager extends BasePortableGUIManager<GlueConsole, BaseArtifactGUIInstance<GlueConsole>> {
 	
-	private BooleanProperty running = new SimpleBooleanProperty(false);
-
 	public GlueConsoleGUIManager() {
 		super("Glue Console", GlueConsole.class, new GlueConsoleManager());
 	}
 
-	public void run(GlueConsole artifact) throws IOException, ParseException {
+	public static void run(GlueConsole artifact) throws IOException, ParseException {
 		AnchorPane display = new AnchorPane();
 		Tab newTab = MainController.getInstance().newTab(artifact.getId() + ": instance");
 		newTab.setContent(display);
 		
 		AceEditor log = new AceEditor();
 		ServiceMethodProvider serviceMethodProvider = new ServiceMethodProvider(artifact.getRepository(), artifact.getRepository(), artifact.getRepository().getServiceRunner());
-		GlueParserProvider parserProvider = new GlueParserProvider(serviceMethodProvider, new StaticJavaMethodProvider(new GlueConsoleMethods(display, log.getWebView())));
+		GlueParserProvider parserProvider = new GlueParserProvider(
+			serviceMethodProvider, 
+			new StaticJavaMethodProvider(new Class<?> [] { ChartMethods.class }), 
+			new StaticJavaMethodProvider(new GlueConsoleMethods(display, log.getWebView()))
+		);
 		DynamicScriptRepository repository = new DynamicScriptRepository(parserProvider);
 		DynamicScript script = new DynamicScript(repository, parserProvider, artifact.getConfig().getScript());
 		repository.add(script);
@@ -69,26 +66,7 @@ public class GlueConsoleGUIManager extends BasePortableGUIManager<GlueConsole, B
 			}
 		});
 		
-		runtime.setFormatter(new SimpleOutputFormatter(new AceEditorWriter(log)) {
-
-			int depth = 0;
-			
-			@Override
-			public void start(Script script) {
-				running.set(true);
-				depth++;
-				super.start(script);
-			}
-
-			@Override
-			public void end(Script script, Date started, Date stopped, Exception exception) {
-				if (--depth == 0) {
-					running.set(false);
-				}
-				super.end(script, started, stopped, exception);
-			}
-			
-		});
+		runtime.setFormatter(new SimpleOutputFormatter(new AceEditorWriter(log)));
 		new Thread(runtime).start();
 	}
 
