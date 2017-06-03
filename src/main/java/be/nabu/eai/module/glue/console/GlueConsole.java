@@ -10,5 +10,5 @@ public class GlueConsole extends JAXBArtifact<GlueConsoleConfiguration> {
 	public GlueConsole(String id, ResourceContainer<?> directory, Repository repository) {
 		super(id, directory, repository, "glue-console.xml", GlueConsoleConfiguration.class);
 	}
-
+	
 }

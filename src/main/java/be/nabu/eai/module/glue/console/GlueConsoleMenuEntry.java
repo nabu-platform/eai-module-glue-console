@@ -1,5 +1,6 @@
 package be.nabu.eai.module.glue.console;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
@@ -12,36 +13,95 @@ import javafx.scene.control.MenuItem;
 import be.nabu.eai.developer.MainController;
 import be.nabu.eai.developer.api.MainMenuEntry;
 import be.nabu.eai.developer.util.EAIDeveloperUtils;
+import be.nabu.eai.repository.api.Entry;
+import be.nabu.glue.api.Script;
+import be.nabu.glue.utils.ScriptUtils;
 
 public class GlueConsoleMenuEntry implements MainMenuEntry {
 
 	@Override
 	public void populate(MenuBar menuBar) {
-		Menu findOrCreate = EAIDeveloperUtils.findOrCreate(menuBar, "Plugins");
-		
+		Menu plugins = EAIDeveloperUtils.findOrCreate(menuBar, "Plugins");
+		populate(plugins, null);
+	}
+
+	public static void populate(Menu plugins, Entry entry) {
 		List<GlueConsole> artifacts = MainController.getInstance().getRepository().getArtifacts(GlueConsole.class);
-		Collections.sort(artifacts, new Comparator<GlueConsole>() {
+		
+		Comparator<MenuItem> comparator = new Comparator<MenuItem>() {
 			@Override
-			public int compare(GlueConsole o1, GlueConsole o2) {
-				return o1.getId().compareTo(o2.getId());
+			public int compare(MenuItem o1, MenuItem o2) {
+				return o1.getText().compareTo(o2.getText());
 			}
-		});
+		};
 		
 		for (GlueConsole artifact : artifacts) {
-			MenuItem item = new MenuItem(artifact.getId());
+			String path = getPath(artifact, entry != null);
+			int index = path.indexOf('/');
+			Menu target = null;
+			if (index >= 0) {
+				for (MenuItem item : plugins.getItems()) {
+					if (item instanceof Menu && item.getText().equals(path.substring(0, index))) {
+						target = (Menu) item;
+						break;
+					}
+				}
+				if (target == null) {
+					target = new Menu(path.substring(0, index));
+					plugins.getItems().add(target);
+					Collections.sort(plugins.getItems(), comparator);
+				}
+			}
+			else {
+				target = plugins;
+			}
+			MenuItem item = new MenuItem(index >= 0 ? path.substring(index) : path);
 			item.addEventHandler(ActionEvent.ANY, new EventHandler<ActionEvent>() {
 				@Override
 				public void handle(ActionEvent arg0) {
 					try {
-						GlueConsoleGUIManager.run(artifact);
+						List<Object> inputs = new ArrayList<Object>();
+						if (entry != null) {
+							inputs.add(entry);
+						}
+						GlueConsoleGUIManager.run(artifact, inputs);
 					}
 					catch (Exception e) {
 						MainController.getInstance().notify(e);
 					}
 				}
 			});
-			findOrCreate.getItems().add(item);
+			Collections.sort(target.getItems(), comparator);
+			target.getItems().add(item);
 		}
 	}
-
+	
+	private static String getPath(GlueConsole console, boolean withParam) {
+		Script script = GlueConsoleGUIManager.getScript(console);
+		String path = null;
+		String category = null;
+		try {
+			boolean hasParam = ScriptUtils.getInputs(script).isEmpty();
+			if (!hasParam && withParam) {
+				return null;
+			}
+			else if (hasParam && !withParam) {
+				return null;
+			}
+			if (script.getRoot() != null) {
+				path = script.getRoot().getContext().getAnnotations().get("title");
+				category = script.getRoot().getContext().getAnnotations().get("category");
+			}
+			if (path == null) {
+				path = console.getId();
+			}
+			if (category != null) {
+				path = category.replace("/", "|") + "/" + path;
+			}
+			return path;
+		}
+		catch (Exception e) {
+			throw new RuntimeException(e);
+		}
+	}
 }

@@ -2,13 +2,16 @@ package be.nabu.eai.module.glue.console;
 
 import java.io.IOException;
 import java.text.ParseException;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
 import javafx.event.ActionEvent;
 import javafx.event.Event;
 import javafx.event.EventHandler;
+import javafx.scene.Node;
 import javafx.scene.control.Button;
 import javafx.scene.control.Tab;
 import javafx.scene.layout.AnchorPane;
@@ -22,6 +25,9 @@ import be.nabu.eai.module.glue.console.table.AceEditorWriter;
 import be.nabu.eai.repository.api.Entry;
 import be.nabu.eai.repository.api.ResourceEntry;
 import be.nabu.eai.repository.resources.RepositoryEntry;
+import be.nabu.glue.api.ParameterDescription;
+import be.nabu.glue.api.Script;
+import be.nabu.glue.core.api.MethodProvider;
 import be.nabu.glue.core.impl.parsers.GlueParserProvider;
 import be.nabu.glue.core.impl.providers.StaticJavaMethodProvider;
 import be.nabu.glue.core.repositories.DynamicScriptRepository;
@@ -30,6 +36,7 @@ import be.nabu.glue.impl.formatters.SimpleOutputFormatter;
 import be.nabu.glue.services.ServiceMethodProvider;
 import be.nabu.glue.utils.DynamicScript;
 import be.nabu.glue.utils.ScriptRuntime;
+import be.nabu.glue.utils.ScriptUtils;
 import be.nabu.jfx.control.ace.AceEditor;
 import be.nabu.libs.property.api.Property;
 import be.nabu.libs.property.api.Value;
@@ -40,24 +47,46 @@ public class GlueConsoleGUIManager extends BasePortableGUIManager<GlueConsole, B
 		super("Glue Console", GlueConsole.class, new GlueConsoleManager());
 	}
 
-	public static void run(GlueConsole artifact) throws IOException, ParseException {
+	public static Script getScript(GlueConsole artifact) {
+		return getScript(artifact, null, null);
+	}
+	
+	public static Script getScript(GlueConsole artifact, Node log, AnchorPane display) {
+		ServiceMethodProvider serviceMethodProvider = new ServiceMethodProvider(artifact.getRepository(), artifact.getRepository(), artifact.getRepository().getServiceRunner());
+		List<MethodProvider> providers = new ArrayList<MethodProvider>();
+		providers.add(serviceMethodProvider); 
+		providers.add(new StaticJavaMethodProvider(new Class<?> [] { ChartMethods.class }));
+		if (log != null && display != null) {
+			providers.add(new StaticJavaMethodProvider(new GlueConsoleMethods(display, log)));
+		}
+		GlueParserProvider parserProvider = new GlueParserProvider(providers.toArray(new MethodProvider[providers.size()]));
+		DynamicScriptRepository repository = new DynamicScriptRepository(parserProvider);
+		DynamicScript script;
+		try {
+			script = new DynamicScript(repository, parserProvider, artifact.getConfig().getScript());
+		}
+		catch (Exception e) {
+			throw new RuntimeException(e);
+		}
+		repository.add(script);
+		return script;
+	}
+	
+	public static void run(GlueConsole artifact, List<Object> inputs) throws IOException, ParseException {
 		AnchorPane display = new AnchorPane();
 		Tab newTab = MainController.getInstance().newTab(artifact.getId() + ": instance");
 		newTab.setContent(display);
 		
 		AceEditor log = new AceEditor();
-		ServiceMethodProvider serviceMethodProvider = new ServiceMethodProvider(artifact.getRepository(), artifact.getRepository(), artifact.getRepository().getServiceRunner());
-		GlueParserProvider parserProvider = new GlueParserProvider(
-			serviceMethodProvider, 
-			new StaticJavaMethodProvider(new Class<?> [] { ChartMethods.class }), 
-			new StaticJavaMethodProvider(new GlueConsoleMethods(display, log.getWebView()))
-		);
-		DynamicScriptRepository repository = new DynamicScriptRepository(parserProvider);
-		DynamicScript script = new DynamicScript(repository, parserProvider, artifact.getConfig().getScript());
-		repository.add(script);
 		
+		Script script = getScript(artifact, log.getWebView(), display);
 		Map<String, String> environment = new HashMap<String, String>();
-		ScriptRuntime runtime = new ScriptRuntime(script, new SimpleExecutionEnvironment("local", environment), false, new HashMap<String, Object>());
+		Map<String, Object> input = new HashMap<String, Object>();
+		Iterator<Object> iterator = inputs.iterator();
+		for (ParameterDescription description : ScriptUtils.getInputs(script)) {
+			input.put(description.getName(), iterator.hasNext() ? iterator.next() : null);
+		}
+		ScriptRuntime runtime = new ScriptRuntime(script, new SimpleExecutionEnvironment("local", environment), false, input);
 		
 		newTab.setOnClosed(new EventHandler<Event>() {
 			@Override
@@ -79,7 +108,7 @@ public class GlueConsoleGUIManager extends BasePortableGUIManager<GlueConsole, B
 			@Override
 			public void handle(ActionEvent arg0) {
 				try {
-					run(artifact);
+					run(artifact, null);
 				}
 				catch (Exception e) {
 					MainController.getInstance().notify(e);
