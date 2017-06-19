@@ -37,6 +37,9 @@ public class GlueConsoleMenuEntry implements MainMenuEntry {
 		
 		for (GlueConsole artifact : artifacts) {
 			String path = getPath(artifact, entry != null);
+			if (path == null) {
+				continue;
+			}
 			int index = path.indexOf('/');
 			Menu target = null;
 			if (index >= 0) {
@@ -55,7 +58,7 @@ public class GlueConsoleMenuEntry implements MainMenuEntry {
 			else {
 				target = plugins;
 			}
-			MenuItem item = new MenuItem(index >= 0 ? path.substring(index) : path);
+			MenuItem item = new MenuItem(index >= 0 ? path.substring(index + 1) : path);
 			item.addEventHandler(ActionEvent.ANY, new EventHandler<ActionEvent>() {
 				@Override
 				public void handle(ActionEvent arg0) {
@@ -78,10 +81,13 @@ public class GlueConsoleMenuEntry implements MainMenuEntry {
 	
 	private static String getPath(GlueConsole console, boolean withParam) {
 		Script script = GlueConsoleGUIManager.getScript(console);
+		if (script == null) {
+			return null;
+		}
 		String path = null;
 		String category = null;
 		try {
-			boolean hasParam = ScriptUtils.getInputs(script).isEmpty();
+			boolean hasParam = !ScriptUtils.getInputs(script).isEmpty();
 			if (!hasParam && withParam) {
 				return null;
 			}

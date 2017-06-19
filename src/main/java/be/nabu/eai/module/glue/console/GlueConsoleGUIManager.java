@@ -11,7 +11,6 @@ import java.util.Map;
 import javafx.event.ActionEvent;
 import javafx.event.Event;
 import javafx.event.EventHandler;
-import javafx.scene.Node;
 import javafx.scene.control.Button;
 import javafx.scene.control.Tab;
 import javafx.scene.layout.AnchorPane;
@@ -51,7 +50,10 @@ public class GlueConsoleGUIManager extends BasePortableGUIManager<GlueConsole, B
 		return getScript(artifact, null, null);
 	}
 	
-	public static Script getScript(GlueConsole artifact, Node log, AnchorPane display) {
+	public static Script getScript(GlueConsole artifact, AceEditor log, AnchorPane display) {
+		if (artifact.getConfig().getScript() == null) {
+			return null;
+		}
 		ServiceMethodProvider serviceMethodProvider = new ServiceMethodProvider(artifact.getRepository(), artifact.getRepository(), artifact.getRepository().getServiceRunner());
 		List<MethodProvider> providers = new ArrayList<MethodProvider>();
 		providers.add(serviceMethodProvider); 
@@ -74,12 +76,17 @@ public class GlueConsoleGUIManager extends BasePortableGUIManager<GlueConsole, B
 	
 	public static void run(GlueConsole artifact, List<Object> inputs) throws IOException, ParseException {
 		AnchorPane display = new AnchorPane();
-		Tab newTab = MainController.getInstance().newTab(artifact.getId() + ": instance");
+		AceEditor log = new AceEditor();
+		// make sure we initialize the webview here on the gui thread
+		log.getWebView();
+
+		Script script = getScript(artifact, log, display);
+
+		String title = script.getRoot().getContext().getAnnotations().get("title");
+		
+		Tab newTab = MainController.getInstance().newTab((title == null ? artifact.getId() : title) + (inputs.isEmpty() ? "" : ": " + ((Entry) inputs.get(0)).getId()));
 		newTab.setContent(display);
 		
-		AceEditor log = new AceEditor();
-		
-		Script script = getScript(artifact, log.getWebView(), display);
 		Map<String, String> environment = new HashMap<String, String>();
 		Map<String, Object> input = new HashMap<String, Object>();
 		Iterator<Object> iterator = inputs.iterator();
@@ -95,7 +102,7 @@ public class GlueConsoleGUIManager extends BasePortableGUIManager<GlueConsole, B
 			}
 		});
 		
-		runtime.setFormatter(new SimpleOutputFormatter(new AceEditorWriter(log)));
+		runtime.setFormatter(new SimpleOutputFormatter(new AceEditorWriter(log), true, false));
 		new Thread(runtime).start();
 	}
 
@@ -108,7 +115,7 @@ public class GlueConsoleGUIManager extends BasePortableGUIManager<GlueConsole, B
 			@Override
 			public void handle(ActionEvent arg0) {
 				try {
-					run(artifact, null);
+					run(artifact, new ArrayList<Object>());
 				}
 				catch (Exception e) {
 					MainController.getInstance().notify(e);

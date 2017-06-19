@@ -5,11 +5,13 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 
+import be.nabu.eai.developer.MainController;
 import be.nabu.eai.module.glue.console.table.ExtendedTableView;
 import be.nabu.glue.annotations.GlueParam;
 import be.nabu.glue.core.api.Lambda;
 import be.nabu.glue.core.impl.GlueUtils;
 import be.nabu.glue.utils.ScriptRuntime;
+import be.nabu.jfx.control.ace.AceEditor;
 import be.nabu.libs.evaluator.annotations.MethodProviderClass;
 import javafx.application.Platform;
 import javafx.beans.value.ChangeListener;
@@ -18,6 +20,8 @@ import javafx.event.ActionEvent;
 import javafx.event.EventHandler;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Node;
+import javafx.scene.Parent;
+import javafx.scene.Scene;
 import javafx.scene.control.Button;
 import javafx.scene.control.CheckBox;
 import javafx.scene.control.Label;
@@ -26,20 +30,66 @@ import javafx.scene.control.TabPane;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
 import javafx.scene.control.TextInputControl;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyEvent;
 import javafx.scene.layout.AnchorPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Pane;
 import javafx.scene.layout.VBox;
+import javafx.stage.Modality;
+import javafx.stage.Stage;
 
 @MethodProviderClass(namespace = "console")
 public class GlueConsoleMethods {
 
 	private Pane target;
-	private Node log;
+	private AceEditor log;
 
-	public GlueConsoleMethods(Pane target, Node log) {
+	public GlueConsoleMethods(Pane target, AceEditor log) {
 		this.target = target;
 		this.log = log;
+	}
+	
+	public void gui(Lambda lambda) {
+		ScriptRuntime runtime = ScriptRuntime.getRuntime();
+		Platform.runLater(new Runnable() {
+			@Override
+			public void run() {
+				ScriptRuntime current = ScriptRuntime.getRuntime();
+				runtime.registerInThread();
+				try {
+					GlueUtils.calculate(lambda, runtime, new ArrayList<Object>());
+				}
+				finally {
+					if (current != null) {
+						current.registerInThread();
+					}
+					else {
+						runtime.unregisterInThread();
+					}
+				}
+			}
+		});
+	}
+	
+	public Stage popup(@GlueParam(name = "title") String title, @GlueParam(name = "node") Parent node) {
+		final Stage stage = new Stage();
+		stage.initOwner(MainController.getInstance().getStage());
+		stage.initModality(Modality.WINDOW_MODAL);
+		stage.setScene(new Scene((Parent) node));
+		stage.setTitle(title);
+
+		stage.addEventHandler(KeyEvent.KEY_PRESSED, new EventHandler<KeyEvent>() {
+			@Override
+			public void handle(KeyEvent arg0) {
+				if (arg0.getCode() == KeyCode.ESCAPE) {
+					stage.hide();
+				}
+			}
+		});
+		
+		stage.show();
+		return stage;
 	}
 	
 	public void display(@GlueParam(name = "node") Object node, @GlueParam(name = "target") Node target, @GlueParam(name = "expand") Boolean expand) {
@@ -78,7 +128,20 @@ public class GlueConsoleMethods {
 	}
 	
 	public Node log() {
-		return log;
+		return log.getWebView();
+	}
+	
+	public void clear() {
+		if (!Platform.isFxApplicationThread()) {
+			Platform.runLater(new Runnable() {
+				public void run() {
+					log.setContent("text/plain", "");
+				}
+			});
+		}
+		else {
+			log.setContent("text/plain", "");
+		}
 	}
 	
 	public static TabPane tabs() {
@@ -91,13 +154,17 @@ public class GlueConsoleMethods {
 	
 	public static VBox vertical(Node...nodes){
 		VBox vbox = new VBox();
-		vbox.getChildren().addAll(nodes);
+		if (nodes != null && nodes.length > 0) {
+			vbox.getChildren().addAll(nodes);
+		}
 		return vbox;
 	}
 	
 	public static HBox horizontal(Node...nodes){
 		HBox hbox = new HBox();
-		hbox.getChildren().addAll(nodes);
+		if (nodes != null && nodes.length > 0) {
+			hbox.getChildren().addAll(nodes);
+		}
 		return hbox;
 	}
 	

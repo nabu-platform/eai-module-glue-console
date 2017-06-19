@@ -17,13 +17,18 @@ public class AceEditorWriter extends Writer {
 	@Override
 	public void write(char[] cbuf, int off, int len) throws IOException {
 		final String string = new String(cbuf, off, len);
-		Platform.runLater(new Runnable() {
-			@Override
-			public void run() {
-				aceEditor.append(string);
-//				textarea.setScrollTop(Double.MAX_VALUE);
-			}
-		});
+		if (!Platform.isFxApplicationThread()) {
+			Platform.runLater(new Runnable() {
+				@Override
+				public void run() {
+					aceEditor.append(string);
+	//				textarea.setScrollTop(Double.MAX_VALUE);
+				}
+			});
+		}
+		else {
+			aceEditor.append(string);
+		}
 	}
 
 	@Override
