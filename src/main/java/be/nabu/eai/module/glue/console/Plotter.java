@@ -48,6 +48,13 @@ public class Plotter {
 				x = "" + counter++;
 				y = entry;
 			}
+			// currently we only support numeric or stringified values
+			if (x != null && !(x instanceof Number) && !(x instanceof String)) {
+				x = x.toString();
+			}
+			if (y != null && !(y instanceof Number) && !(y instanceof String)) {
+				y = y.toString();
+			}
 			series.getData().add(new XYChart.Data(x, y));
 		}
 		return series;
@@ -143,6 +150,7 @@ public class Plotter {
 		if (labelY != null) {
 			yAxis.setLabel(labelY);
 		}
+//		StackedBarChart stacked = new StackedBarChart<X, Y>(xaxi, arg1)
 		BarChart chart = new BarChart(xAxis, yAxis);
 		if (title != null) {
 			chart.setTitle(title);

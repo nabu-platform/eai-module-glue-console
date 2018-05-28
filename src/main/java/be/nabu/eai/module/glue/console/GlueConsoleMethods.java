@@ -1,9 +1,48 @@
 package be.nabu.eai.module.glue.console;
 
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
+
+import javafx.application.Platform;
+import javafx.beans.value.ChangeListener;
+import javafx.beans.value.ObservableValue;
+import javafx.embed.swing.SwingFXUtils;
+import javafx.event.ActionEvent;
+import javafx.event.Event;
+import javafx.event.EventHandler;
+import javafx.fxml.FXMLLoader;
+import javafx.print.PrinterJob;
+import javafx.scene.Node;
+import javafx.scene.Parent;
+import javafx.scene.Scene;
+import javafx.scene.SnapshotParameters;
+import javafx.scene.control.Button;
+import javafx.scene.control.CheckBox;
+import javafx.scene.control.Label;
+import javafx.scene.control.Tab;
+import javafx.scene.control.TabPane;
+import javafx.scene.control.TextArea;
+import javafx.scene.control.TextField;
+import javafx.scene.control.TextInputControl;
+import javafx.scene.image.WritableImage;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyEvent;
+import javafx.scene.layout.AnchorPane;
+import javafx.scene.layout.HBox;
+import javafx.scene.layout.Pane;
+import javafx.scene.layout.Region;
+import javafx.scene.layout.VBox;
+import javafx.stage.Modality;
+import javafx.stage.Stage;
+
+import javax.imageio.ImageIO;
 
 import be.nabu.eai.developer.MainController;
 import be.nabu.eai.module.glue.console.table.ExtendedTableView;
@@ -13,39 +52,17 @@ import be.nabu.glue.core.impl.GlueUtils;
 import be.nabu.glue.utils.ScriptRuntime;
 import be.nabu.jfx.control.ace.AceEditor;
 import be.nabu.libs.evaluator.annotations.MethodProviderClass;
-import javafx.application.Platform;
-import javafx.beans.value.ChangeListener;
-import javafx.beans.value.ObservableValue;
-import javafx.event.ActionEvent;
-import javafx.event.EventHandler;
-import javafx.fxml.FXMLLoader;
-import javafx.scene.Node;
-import javafx.scene.Parent;
-import javafx.scene.Scene;
-import javafx.scene.control.Button;
-import javafx.scene.control.CheckBox;
-import javafx.scene.control.Label;
-import javafx.scene.control.Tab;
-import javafx.scene.control.TabPane;
-import javafx.scene.control.TextArea;
-import javafx.scene.control.TextField;
-import javafx.scene.control.TextInputControl;
-import javafx.scene.input.KeyCode;
-import javafx.scene.input.KeyEvent;
-import javafx.scene.layout.AnchorPane;
-import javafx.scene.layout.HBox;
-import javafx.scene.layout.Pane;
-import javafx.scene.layout.VBox;
-import javafx.stage.Modality;
-import javafx.stage.Stage;
 
 @MethodProviderClass(namespace = "console")
 public class GlueConsoleMethods {
 
 	private Pane target;
 	private AceEditor log;
+	private GlueConsole artifact;
+	private Map<String, Object> views = new HashMap<String, Object>();
 
-	public GlueConsoleMethods(Pane target, AceEditor log) {
+	public GlueConsoleMethods(GlueConsole artifact, Pane target, AceEditor log) {
+		this.artifact = artifact;
 		this.target = target;
 		this.log = log;
 	}
@@ -72,25 +89,154 @@ public class GlueConsoleMethods {
 		});
 	}
 	
-	public Stage popup(@GlueParam(name = "title") String title, @GlueParam(name = "node") Parent node) {
-		final Stage stage = new Stage();
-		stage.initOwner(MainController.getInstance().getStage());
-		stage.initModality(Modality.WINDOW_MODAL);
-		stage.setScene(new Scene((Parent) node));
-		stage.setTitle(title);
-
-		stage.addEventHandler(KeyEvent.KEY_PRESSED, new EventHandler<KeyEvent>() {
-			@Override
-			public void handle(KeyEvent arg0) {
-				if (arg0.getCode() == KeyCode.ESCAPE) {
-					stage.hide();
+	public byte [] screenshot(Region node, String format) throws IOException {
+		if (format == null) {
+			format = "png";
+		}
+		WritableImage writableImage = new WritableImage((int) node.getWidth(), (int) node.getHeight());
+		node.snapshot(new SnapshotParameters(), writableImage);
+		ByteArrayOutputStream output = new ByteArrayOutputStream();
+		ImageIO.write(SwingFXUtils.fromFXImage(writableImage, null), format, output);
+		return output.toByteArray();
+	}
+	
+	public void print(Region region) {
+		if (region == null) {
+			region = target;
+		}
+		PrinterJob job = PrinterJob.createPrinterJob();
+		if (job != null) {                    
+			boolean showPrintDialog = job.showPrintDialog(MainController.getInstance().getStage());
+			if (showPrintDialog) {                        
+//				region.setScaleX(0.60);
+//				region.setScaleY(0.60);
+//				region.setTranslateX(-220);
+//				region.setTranslateY(-70);
+				boolean success = job.printPage(region);
+				if (success) {
+					job.endJob();
 				}
+//				region.setTranslateX(0);
+//				region.setTranslateY(0);
+//				region.setScaleX(1.0);
+//				region.setScaleY(1.0);                                              
+			}  
+		}
+	}
+	
+	public String window(@GlueParam(name = "title") String title, @GlueParam(name = "node") Parent node) {
+		String id = UUID.randomUUID().toString().replace("-", "");
+
+		Platform.runLater(new Runnable() {
+			@Override
+			public void run() {
+				Tab newTab = MainController.getInstance().newTab(title);
+				newTab.setContent(node);
+				newTab.setOnClosed(new EventHandler<Event>() {
+					@Override
+					public void handle(Event arg0) {
+						ScriptRuntime runtime = ScriptRuntime.getRuntime();
+						if (runtime != null) {
+							runtime.abort();
+						}
+					}
+				});
+				views.put(id, newTab);
 			}
 		});
 		
-		stage.show();
-		return stage;
+		return id;
 	}
+	
+	public String popup(@GlueParam(name = "title") String title, @GlueParam(name = "node") Parent node, @GlueParam(name = "modal") Boolean modal, @GlueParam(name = "width") Integer width, @GlueParam(name = "height") Integer height, @GlueParam(name = "fullscreen") Boolean fullscreen) {
+		String id = UUID.randomUUID().toString().replace("-", "");
+		
+		Platform.runLater(new Runnable() {
+			@Override
+			public void run() {
+				final Stage stage = new Stage();
+				stage.initOwner(MainController.getInstance().getStage());
+				if (modal != null && modal) {
+					stage.initModality(Modality.WINDOW_MODAL);
+				}
+				Scene scene = new Scene((Parent) node);
+				stage.setScene(scene);
+				stage.setTitle(title);
+				
+				if (width != null) {
+					stage.setWidth(width);
+				}
+				if (height != null) {
+					stage.setHeight(height);
+				}
+				if (fullscreen != null) {
+					stage.setFullScreen(fullscreen);
+				}
+				
+				stage.addEventHandler(KeyEvent.KEY_PRESSED, new EventHandler<KeyEvent>() {
+					@Override
+					public void handle(KeyEvent arg0) {
+						if (arg0.getCode() == KeyCode.ESCAPE) {
+							stage.hide();
+						}
+					}
+				});
+				
+				stage.show();
+				
+				views.put(id, stage);
+			}
+		});
+		return id;
+	}
+	
+	public void hide(String...ids) {
+		Platform.runLater(new Runnable() {
+			@Override
+			public void run() {
+				Collection<String> idsToClose = ids == null || ids.length == 0 ? views.keySet() : Arrays.asList(ids);
+				for (String idToClose : idsToClose) {
+					Object object = views.get(idToClose);
+					if (object != null) {
+						if (object instanceof Tab) {
+							MainController.getInstance().close((Tab) object);
+						}
+						else if (object instanceof Stage) {
+							((Stage) object).hide();
+						}
+						views.remove(idToClose);
+					}
+				}
+			}
+		});
+	}
+	
+//	private boolean initializedDisplay = false;
+//	
+//	private void displayInit() {
+//		if (!initializedDisplay) {
+//			synchronized(this) {
+//				if (!initializedDisplay) {
+//					String title = artifact.getConfig().getTitle();
+//					if (title == null) {
+//						title = artifact.getId();
+//					}
+//					Tab newTab = MainController.getInstance().newTab(title);
+//					newTab.setContent(target);
+//					newTab.setOnClosed(new EventHandler<Event>() {
+//						@Override
+//						public void handle(Event arg0) {
+//							ScriptRuntime runtime = ScriptRuntime.getRuntime();
+//							if (runtime != null) {
+//								runtime.abort();
+//							}
+//						}
+//					});
+//					initializedDisplay = true;
+//				}
+//			}
+//		}
+//	}
 	
 	public void display(@GlueParam(name = "node") Object node, @GlueParam(name = "target") Node target, @GlueParam(name = "expand") Boolean expand) {
 		if (target instanceof TabPane) {
@@ -121,6 +267,7 @@ public class GlueConsoleMethods {
 			final Node finalNode = (Node) node;
 			Platform.runLater(new Runnable() {
 				public void run() {
+//					displayInit();
 					finalTarget.getChildren().add(finalNode);
 				}
 			});

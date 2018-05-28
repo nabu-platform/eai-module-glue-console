@@ -11,8 +11,11 @@ import java.util.Map;
 import javafx.event.ActionEvent;
 import javafx.event.Event;
 import javafx.event.EventHandler;
+import javafx.geometry.Side;
 import javafx.scene.control.Button;
 import javafx.scene.control.Tab;
+import javafx.scene.control.TabPane;
+import javafx.scene.control.TabPane.TabClosingPolicy;
 import javafx.scene.layout.AnchorPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
@@ -20,6 +23,8 @@ import javafx.scene.layout.VBox;
 import be.nabu.eai.developer.MainController;
 import be.nabu.eai.developer.managers.base.BaseArtifactGUIInstance;
 import be.nabu.eai.developer.managers.base.BasePortableGUIManager;
+import be.nabu.eai.developer.managers.util.SimplePropertyUpdater;
+import be.nabu.eai.developer.util.EAIDeveloperUtils;
 import be.nabu.eai.module.glue.console.table.AceEditorWriter;
 import be.nabu.eai.repository.api.Entry;
 import be.nabu.eai.repository.api.ResourceEntry;
@@ -59,7 +64,7 @@ public class GlueConsoleGUIManager extends BasePortableGUIManager<GlueConsole, B
 		providers.add(serviceMethodProvider); 
 		providers.add(new StaticJavaMethodProvider(new Class<?> [] { ChartMethods.class }));
 		if (log != null && display != null) {
-			providers.add(new StaticJavaMethodProvider(new GlueConsoleMethods(display, log)));
+			providers.add(new StaticJavaMethodProvider(new GlueConsoleMethods(artifact, display, log)));
 		}
 		GlueParserProvider parserProvider = new GlueParserProvider(providers.toArray(new MethodProvider[providers.size()]));
 		DynamicScriptRepository repository = new DynamicScriptRepository(parserProvider);
@@ -82,10 +87,10 @@ public class GlueConsoleGUIManager extends BasePortableGUIManager<GlueConsole, B
 
 		Script script = getScript(artifact, log, display);
 
-		String title = script.getRoot().getContext().getAnnotations().get("title");
-		
-		Tab newTab = MainController.getInstance().newTab((title == null ? artifact.getId() : title) + (inputs.isEmpty() ? "" : ": " + ((Entry) inputs.get(0)).getId()));
-		newTab.setContent(display);
+		String title = artifact.getConfig().getTitle();
+		if (title == null) {
+			title = script.getRoot().getContext().getAnnotations().get("title");
+		}
 		
 		Map<String, String> environment = new HashMap<String, String>();
 		Map<String, Object> input = new HashMap<String, Object>();
@@ -94,13 +99,6 @@ public class GlueConsoleGUIManager extends BasePortableGUIManager<GlueConsole, B
 			input.put(description.getName(), iterator.hasNext() ? iterator.next() : null);
 		}
 		ScriptRuntime runtime = new ScriptRuntime(script, new SimpleExecutionEnvironment("local", environment), false, input);
-		
-		newTab.setOnClosed(new EventHandler<Event>() {
-			@Override
-			public void handle(Event arg0) {
-				runtime.abort();
-			}
-		});
 		
 		runtime.setFormatter(new SimpleOutputFormatter(new AceEditorWriter(log), true, false));
 		new Thread(runtime).start();
@@ -165,11 +163,25 @@ public class GlueConsoleGUIManager extends BasePortableGUIManager<GlueConsole, B
 		
 		VBox.setVgrow(editor.getWebView(), Priority.ALWAYS);
 		
-		AnchorPane.setBottomAnchor(box, 0d);
-		AnchorPane.setTopAnchor(box, 0d);
-		AnchorPane.setRightAnchor(box, 0d);
-		AnchorPane.setLeftAnchor(box, 0d);
-		pane.getChildren().add(box);
+		TabPane tabs = new TabPane();
+		tabs.setTabClosingPolicy(TabClosingPolicy.UNAVAILABLE);
+		tabs.setSide(Side.RIGHT);
+		Tab tab = new Tab("Script");
+		tab.setContent(box);
+		tabs.getTabs().add(tab);
+		
+		tab = new Tab("Configuration");
+		SimplePropertyUpdater createUpdater = EAIDeveloperUtils.createUpdater(artifact.getConfig(), null, "script");
+		AnchorPane properties = new AnchorPane();
+		MainController.getInstance().showProperties(createUpdater, properties, false);
+		tab.setContent(properties);
+		tabs.getTabs().add(tab);
+		
+		AnchorPane.setBottomAnchor(tabs, 0d);
+		AnchorPane.setTopAnchor(tabs, 0d);
+		AnchorPane.setRightAnchor(tabs, 0d);
+		AnchorPane.setLeftAnchor(tabs, 0d);
+		pane.getChildren().add(tabs);
 	}
 
 	@Override
