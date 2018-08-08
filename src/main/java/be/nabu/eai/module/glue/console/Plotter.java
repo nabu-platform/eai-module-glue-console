@@ -7,6 +7,7 @@ import java.util.List;
 import be.nabu.glue.core.api.Lambda;
 import be.nabu.glue.core.impl.GlueUtils;
 import be.nabu.glue.utils.ScriptRuntime;
+import javafx.collections.ObservableList;
 import javafx.scene.chart.AreaChart;
 import javafx.scene.chart.Axis;
 import javafx.scene.chart.BarChart;
@@ -17,6 +18,7 @@ import javafx.scene.chart.NumberAxis;
 import javafx.scene.chart.PieChart;
 import javafx.scene.chart.ScatterChart;
 import javafx.scene.chart.XYChart;
+import javafx.scene.control.Tooltip;
 import javafx.scene.shape.TriangleMesh;
 
 public class Plotter {
@@ -76,6 +78,9 @@ public class Plotter {
 		}
 		for (XYChart.Series entry : series) {
 			chart.getData().add(entry);
+			for (XYChart.Data data : (ObservableList<XYChart.Data>) entry.getData()) {
+				Tooltip.install(data.getNode(), new Tooltip(data.getYValue().toString()));
+			}
 		}
 		return chart;
 	}
