@@ -128,5 +128,10 @@
 			<artifactId>jfx-control-ace</artifactId>
 			<scope>provided</scope>
 		</dependency>
+		<dependency>
+			<groupId>org.openjfx</groupId>
+			<artifactId>javafx-swing</artifactId>
+			<version>23</version>
+		</dependency>
 	</dependencies>
 </project>
